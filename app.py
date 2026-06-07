@@ -8,7 +8,8 @@ import os
 app = Flask(__name__)
 CORS(app)
 model = SentenceTransformer("BAAI/bge-base-en-v1.5")
-groq_client = Groq(api_key=os.environ.get("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"))def get_explanation(query, case_title, case_text, verdict, ipc_sections):
+groq_client =groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+get_explanation(query, case_title, case_text, verdict, ipc_sections):
     prompt = f"""You are a legal assistant. A user searched for: "{query}"
     
 A relevant Indian court case was found:
