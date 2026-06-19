@@ -14,19 +14,31 @@ CORS(app)
 model = SentenceTransformer("BAAI/bge-base-en-v1.5")
 groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
+CRIMINAL_KEYWORDS = {
+    "murder", "theft", "robbery", "assault", "rape", "kidnap", "fraud",
+    "cheating", "forgery", "extortion", "bribery", "criminal", "ipc",
+    "arrest", "bail", "accused", "fir", "police", "offence", "offense",
+    "conviction", "acquittal", "homicide", "dacoity", "abduction"
+}
+
+def is_criminal_query(query):
+    words = query.lower().split()
+    return any(w in CRIMINAL_KEYWORDS for w in words)
+
 def get_cases(query):
     conn = psycopg2.connect(dbname="legaldb", user="devanshgoel", password="", host="localhost", port="5432")
     cur = conn.cursor()
     prefixed_query = f"Represent this sentence for searching relevant passages: {query}"
     embedding = model.encode(prefixed_query, normalize_embeddings=True).tolist()
+    boost = 0.03 if is_criminal_query(query) else 0
     cur.execute("""
         SELECT title, court_name, case_type, doc_url, text,
                1 - (embedding <=> %s::vector) AS similarity, ipc_sections, verdict
         FROM cases
-        ORDER BY (1 - (embedding <=> %s::vector)) + 
-                 CASE WHEN LOWER(case_type) LIKE '%%criminal%%' THEN 0.03 ELSE 0 END DESC
+        ORDER BY (1 - (embedding <=> %s::vector)) +
+                 CASE WHEN LOWER(case_type) LIKE '%%criminal%%' THEN %s ELSE 0 END DESC
         LIMIT 5
-    """, (embedding, embedding))
+    """, (embedding, embedding, boost))
     rows = cur.fetchall()
     cur.close()
     conn.close()
