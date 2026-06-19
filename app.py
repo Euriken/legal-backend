@@ -28,32 +28,53 @@ def is_criminal_query(query):
 def get_cases(query):
     conn = psycopg2.connect(dbname="legaldb", user="devanshgoel", password="", host="localhost", port="5432")
     cur = conn.cursor()
-    prefixed_query = f"Represent this sentence for searching relevant passages: {query}"
+    prefixed_query = "Represent this sentence for searching relevant passages: " + query
     embedding = model.encode(prefixed_query, normalize_embeddings=True).tolist()
     boost = 0.03 if is_criminal_query(query) else 0
-    cur.execute("""
-        SELECT title, court_name, case_type, doc_url, text,
-               1 - (embedding <=> %s::vector) AS similarity, ipc_sections, verdict
-        FROM cases
-        ORDER BY (1 - (embedding <=> %s::vector)) +
-                 CASE WHEN LOWER(case_type) LIKE '%%criminal%%' THEN %s ELSE 0 END DESC
-        LIMIT 5
-    """, (embedding, embedding, boost))
-    rows = cur.fetchall()
+
+    cur.execute("SELECT id, title, court_name, case_type, doc_url, text, 1 - (embedding <=> %s::vector) AS similarity, ipc_sections, verdict FROM cases ORDER BY similarity DESC LIMIT 20", (embedding,))
+    vector_rows = cur.fetchall()
+
+    try:
+        cur.execute("SELECT id, title, court_name, case_type, doc_url, text, ts_rank(ts_vector, plainto_tsquery(%s, %s)) AS similarity, ipc_sections, verdict FROM cases WHERE ts_vector @@ plainto_tsquery(%s, %s) ORDER BY similarity DESC LIMIT 20", ("english", query, "english", query))
+        bm25_rows = cur.fetchall()
+    except Exception:
+        bm25_rows = []
+
     cur.close()
     conn.close()
 
+    K = 60
+    scores = {}
+    case_data = {}
+
+    for rank, row in enumerate(vector_rows):
+        cid = row[0]
+        scores[cid] = scores.get(cid, 0) + 1.0 / (K + rank + 1)
+        case_data[cid] = row
+
+    for rank, row in enumerate(bm25_rows):
+        cid = row[0]
+        scores[cid] = scores.get(cid, 0) + 1.0 / (K + rank + 1)
+        case_data[cid] = row
+
+    def final_score(cid):
+        criminal = case_data[cid][3] and "criminal" in case_data[cid][3].lower()
+        return scores[cid] + (boost if criminal else 0)
+
+    sorted_ids = sorted(scores.keys(), key=final_score, reverse=True)[:5]
+
+    # Build a quick lookup of vector similarity scores
+    vector_sim = {row[0]: round(row[6], 3) for row in vector_rows}
+
     results = []
-    for r in rows:
+    for cid in sorted_ids:
+        r = case_data[cid]
         results.append({
-            "title": r[0],
-            "court": r[1],
-            "case_type": r[2],
-            "url": r[3],
-            "text": r[4][:500],
-            "similarity": round(r[5], 3),
-            "ipc_sections": r[6],
-            "verdict": r[7]
+            "title": r[1], "court": r[2], "case_type": r[3],
+            "url": r[4], "text": r[5][:500],
+            "similarity": vector_sim.get(cid, round(scores[cid], 4)),
+            "ipc_sections": r[7], "verdict": r[8]
         })
     return results
 
