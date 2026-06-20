@@ -26,7 +26,7 @@ def is_criminal_query(query):
     return any(w in CRIMINAL_KEYWORDS for w in words)
 
 def get_cases(query):
-    conn = psycopg2.connect(dbname="legaldb", user="devanshgoel", password="", host="localhost", port="5432")
+    conn = psycopg2.connect(os.environ.get("DATABASE_URL", "dbname=legaldb user=devanshgoel host=localhost port=5432"))
     cur = conn.cursor()
     prefixed_query = "Represent this sentence for searching relevant passages: " + query
     embedding = model.encode(prefixed_query, normalize_embeddings=True).tolist()
