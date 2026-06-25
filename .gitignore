@@ -1,1 +1,6 @@
 .env
+*.csv
+*.dump
+opennyaya/
+__pycache__/
+*.pyc
