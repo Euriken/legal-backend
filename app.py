@@ -121,6 +121,37 @@ db_pool = pool.SimpleConnectionPool(
     os.environ.get("DATABASE_URL", "dbname=legaldb user=devanshgoel host=localhost port=5432")
 )
 
+def _backfill_tsvector():
+    """Populate ts_vector for any cases missing it (e.g. newly imported OpenNyaya cases).
+    Runs once at startup in a background thread so it doesn't block requests."""
+    import threading, time
+    def _run():
+        time.sleep(5)  # wait for pool to be fully ready
+        try:
+            conn = get_conn()
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM cases WHERE ts_vector IS NULL")
+            missing = cur.fetchone()[0]
+            if missing > 0:
+                print(f"[startup] Backfilling ts_vector for {missing} cases...")
+                cur.execute("""
+                    UPDATE cases
+                    SET ts_vector = to_tsvector('english',
+                        coalesce(title, '') || ' ' || coalesce(text, ''))
+                    WHERE ts_vector IS NULL
+                """)
+                conn.commit()
+                print(f"[startup] ts_vector backfill complete ({missing} rows updated)")
+            else:
+                print("[startup] ts_vector already populated for all cases")
+            cur.close()
+            put_conn(conn)
+        except Exception as e:
+            print(f"[startup] ts_vector backfill failed: {e}")
+    threading.Thread(target=_run, daemon=True).start()
+
+_backfill_tsvector()
+
 def get_conn():
     return db_pool.getconn()
 
