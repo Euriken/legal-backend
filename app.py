@@ -5,9 +5,21 @@ from psycopg2 import pool
 from sentence_transformers import SentenceTransformer
 from groq import Groq
 import os
+import time
 
 from dotenv import load_dotenv
 load_dotenv()
+
+# ── In-memory cache ─────────────────────────────────────────────────────────
+# search cache: key → (timestamp, result_dict)  — expires after SEARCH_TTL seconds
+# stats cache : key → result_dict               — permanent (cleared only on restart)
+SEARCH_CACHE: dict = {}
+STATS_CACHE:  dict = {}
+SEARCH_TTL   = 3600  # 1 hour in seconds
+
+def _search_cache_key(query, page, per_page, year_from, year_to, verdict, case_type, court) -> str:
+    return f"{query}|{page}|{per_page}|{year_from}|{year_to}|{verdict}|{case_type}|{court}"
+
 
 from ipc_bns_map import IPC_BNS_MAP
 
@@ -353,7 +365,22 @@ def search():
             except ValueError:
                 year_to = None
 
-        return jsonify(get_cases(query, page, per_page, year_from, year_to, verdict, case_type, court))
+        # ── Cache lookup ──────────────────────────────────────────────────
+        cache_key = _search_cache_key(query, page, per_page, year_from, year_to, verdict, case_type, court)
+        cached = SEARCH_CACHE.get(cache_key)
+        if cached:
+            ts, result = cached
+            if time.time() - ts < SEARCH_TTL:
+                print(f"[cache] SEARCH HIT  key={cache_key[:60]}")
+                return jsonify(result)
+            else:
+                # Expired — remove stale entry
+                del SEARCH_CACHE[cache_key]
+        print(f"[cache] SEARCH MISS key={cache_key[:60]}")
+
+        result = get_cases(query, page, per_page, year_from, year_to, verdict, case_type, court)
+        SEARCH_CACHE[cache_key] = (time.time(), result)
+        return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -486,13 +513,19 @@ Never write paragraphs. Keep total response under 150 words."""}
 
 @app.route("/stats", methods=["GET"])
 def stats():
+    # ── Permanent stats cache ────────────────────────────────────────────────
+    if "stats" in STATS_CACHE:
+        print("[cache] STATS HIT")
+        return jsonify(STATS_CACHE["stats"])
+    print("[cache] STATS MISS — querying DB")
+
     conn = get_conn()
     try:
         cur = conn.cursor()
         
-        # 1. Cases by Court
-        cur.execute("SELECT court_name, COUNT(*) FROM cases GROUP BY court_name ORDER BY COUNT(*) DESC LIMIT 5")
-        courts = [{"court": r[0], "count": r[1]} for r in cur.fetchall()]
+        # 1. Cases by Court (top 10)
+        cur.execute("SELECT court_name, COUNT(*) FROM cases GROUP BY court_name ORDER BY COUNT(*) DESC LIMIT 10")
+        courts = [{"court": r[0] or "Unknown", "count": r[1]} for r in cur.fetchall()]
         
         # 2. Cases by Type
         cur.execute("SELECT case_type, COUNT(*) FROM cases WHERE case_type IS NOT NULL AND case_type != '' GROUP BY case_type ORDER BY COUNT(*) DESC")
@@ -523,17 +556,36 @@ def stats():
         # 6. Total Count
         cur.execute("SELECT COUNT(*) FROM cases")
         total = cur.fetchone()[0]
+
+        # 7. Court Type breakdown (Supreme Court vs High Court vs District)
+        cur.execute("""
+            SELECT 
+                CASE 
+                    WHEN court_type IN ('Supreme Court', 'Supreme_Court') THEN 'Supreme Court'
+                    WHEN court_type = 'High_Court' THEN 'High Court'
+                    WHEN court_type = 'District_And_Tribunals' THEN 'District Court / Tribunals'
+                    ELSE COALESCE(court_type, 'Other')
+                END AS court_category,
+                COUNT(*) AS cnt
+            FROM cases
+            GROUP BY court_category
+            ORDER BY cnt DESC
+        """)
+        court_types = [{"court_type": r[0], "count": r[1]} for r in cur.fetchall()]
         
         cur.close()
         
-        return jsonify({
+        payload = {
             "total_cases": total,
             "by_court": courts,
             "by_type": types,
             "by_year": years,
             "by_ipc": ipc,
-            "by_verdict": verdicts
-        })
+            "by_verdict": verdicts,
+            "by_court_type": court_types,
+        }
+        STATS_CACHE["stats"] = payload
+        return jsonify(payload)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:
