@@ -310,6 +310,10 @@ def get_cases(query, page=1, per_page=10, year_from=None, year_to=None, verdict=
 def index():
     return "Indian Legal Search API is running!"
 
+@app.route("/ping")
+def ping():
+    return jsonify({"status": "ok"})
+
 @app.route("/search", methods=["POST"])
 def search():
     try:
