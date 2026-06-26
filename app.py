@@ -169,7 +169,11 @@ def is_criminal_query(query):
     words = query.lower().split()
     return any(w in CRIMINAL_KEYWORDS for w in words)
 
-def get_cases(query, page=1, per_page=10, year_from=None, year_to=None, verdict=None, case_type=None, court=None):
+def get_cases(query, page=1, per_page=5, year_from=None, year_to=None, verdict=None, case_type=None, court=None):
+    # Cap per_page at 10; cap total results returned at 50 (10 pages of 5)
+    per_page = min(per_page, 10)
+    MAX_RESULTS = 50
+    candidate_limit = MAX_RESULTS * 2  # fetch more than we need for good RRF coverage
     conn = get_conn()
     try:
         cur = conn.cursor()
@@ -213,7 +217,7 @@ def get_cases(query, page=1, per_page=10, year_from=None, year_to=None, verdict=
                    1 - (embedding <=> %s::vector) AS similarity, 
                    ipc_sections, verdict, case_year, summary 
             FROM cases {where_str} 
-            ORDER BY similarity DESC LIMIT 100
+            ORDER BY similarity DESC LIMIT {candidate_limit}
         """
         cur.execute(vector_query, vector_params)
         vector_rows = cur.fetchall()
@@ -250,7 +254,7 @@ def get_cases(query, page=1, per_page=10, year_from=None, year_to=None, verdict=
                        ts_rank(ts_vector, plainto_tsquery(%s, %s)) AS similarity, 
                        ipc_sections, verdict, case_year, summary 
                 FROM cases {bm25_where} 
-                ORDER BY similarity DESC LIMIT 100
+                ORDER BY similarity DESC LIMIT {candidate_limit}
             """
             cur.execute(bm25_query, bm25_params)
             bm25_rows = cur.fetchall()
@@ -280,7 +284,12 @@ def get_cases(query, page=1, per_page=10, year_from=None, year_to=None, verdict=
         return scores[cid] + (boost if criminal else 0)
 
     all_sorted = sorted(scores.keys(), key=final_score, reverse=True)
+
+    # Cap total at MAX_RESULTS
+    all_sorted = all_sorted[:MAX_RESULTS]
     total = len(all_sorted)
+    total_pages = max(1, -(-total // per_page))  # ceiling division
+
     start = (page - 1) * per_page
     page_ids = all_sorted[start:start + per_page]
 
@@ -304,7 +313,13 @@ def get_cases(query, page=1, per_page=10, year_from=None, year_to=None, verdict=
             "year": r[9],
             "summary": r[10]
         })
-    return {"results": results, "total": total, "page": page, "per_page": per_page}
+    return {
+        "results": results,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": total_pages,
+    }
 
 @app.route("/")
 def index():
@@ -319,7 +334,7 @@ def search():
     try:
         query = request.json.get("query", "")
         page = request.json.get("page", 1)
-        per_page = request.json.get("per_page", 10)
+        per_page = request.json.get("per_page", request.json.get("page_size", 5))
         year_from = request.json.get("year_from")
         year_to = request.json.get("year_to")
         verdict = request.json.get("verdict")
