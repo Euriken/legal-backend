@@ -6,6 +6,7 @@ from sentence_transformers import SentenceTransformer
 from groq import Groq
 import os
 import time
+import traceback
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -197,12 +198,6 @@ def get_cases(query, page=1, per_page=5, year_from=None, year_to=None, verdict=N
         where_clauses = []
         vector_params = [embedding]
         
-        if year_from is not None:
-            where_clauses.append("case_year >= %s")
-            vector_params.append(year_from)
-        if year_to is not None:
-            where_clauses.append("case_year <= %s")
-            vector_params.append(year_to)
         if verdict:
             where_clauses.append("verdict = %s")
             vector_params.append(verdict)
@@ -229,7 +224,7 @@ def get_cases(query, page=1, per_page=5, year_from=None, year_to=None, verdict=N
         vector_query = f"""
             SELECT id, title, court_name, case_type, doc_url, text, 
                    1 - (embedding <=> %s::vector) AS similarity, 
-                   ipc_sections, verdict, case_year, summary 
+                   ipc_sections, verdict, summary 
             FROM cases {where_str} 
             ORDER BY similarity DESC LIMIT {candidate_limit}
         """
@@ -239,12 +234,6 @@ def get_cases(query, page=1, per_page=5, year_from=None, year_to=None, verdict=N
         try:
             bm25_params = ["english", query, "english", query]
             bm25_clauses = ["ts_vector @@ plainto_tsquery(%s, %s)"]
-            if year_from is not None:
-                bm25_clauses.append("case_year >= %s")
-                bm25_params.append(year_from)
-            if year_to is not None:
-                bm25_clauses.append("case_year <= %s")
-                bm25_params.append(year_to)
             if verdict:
                 bm25_clauses.append("verdict = %s")
                 bm25_params.append(verdict)
@@ -268,16 +257,22 @@ def get_cases(query, page=1, per_page=5, year_from=None, year_to=None, verdict=N
             bm25_query = f"""
                 SELECT id, title, court_name, case_type, doc_url, text, 
                        ts_rank(ts_vector, plainto_tsquery(%s, %s)) AS similarity, 
-                       ipc_sections, verdict, case_year, summary 
+                       ipc_sections, verdict, summary 
                 FROM cases {bm25_where} 
                 ORDER BY similarity DESC LIMIT {candidate_limit}
             """
             cur.execute(bm25_query, bm25_params)
             bm25_rows = cur.fetchall()
-        except Exception:
+        except Exception as e:
+            print("[BM25 Exception]")
+            traceback.print_exc()
             bm25_rows = []
 
         cur.close()
+    except Exception as e:
+        print("[get_cases Exception]")
+        traceback.print_exc()
+        raise e
     finally:
         put_conn(conn)
 
@@ -326,8 +321,8 @@ def get_cases(query, page=1, per_page=5, year_from=None, year_to=None, verdict=N
             "verdict": r[8],
             "bns_sections": enriched["bns_sections"],
             "sentence_range": enriched["sentence_range"],
-            "year": r[9],
-            "summary": r[10]
+            "year": None,
+            "summary": r[9]
         })
     return {
         "results": results,
@@ -404,13 +399,13 @@ def get_case(case_id):
     conn = get_conn()
     try:
         cur = conn.cursor()
-        cur.execute("SELECT id, title, court_name, case_type, doc_url, text, ipc_sections, verdict, case_year, summary FROM cases WHERE id = %s", (case_id,))
+        cur.execute("SELECT id, title, court_name, case_type, doc_url, text, ipc_sections, verdict, summary FROM cases WHERE id = %s", (case_id,))
         row = cur.fetchone()
         if not row:
             cur.close()
             return jsonify({"error": "Case not found"}), 404
             
-        summary = row[9]
+        summary = row[8]
         if not summary:
             # Generate summary on-the-fly
             try:
@@ -446,7 +441,7 @@ Judgment Snippet:
             "id": row[0], "title": row[1], "court": row[2], "case_type": row[3],
             "url": row[4], "text": row[5], "ipc_sections": ipc, "verdict": row[7],
             "bns_sections": enriched["bns_sections"], "sentence_range": enriched["sentence_range"],
-            "year": row[8], "summary": summary
+            "year": None, "summary": summary
         }
         SEARCH_CACHE[cache_key] = (time.time(), result_dict)
         return jsonify(result_dict)
@@ -458,7 +453,7 @@ def get_related(case_id):
     conn = get_conn()
     try:
         cur = conn.cursor()
-        cur.execute("SELECT id, title, court_name, case_type, doc_url, ipc_sections, verdict, 1 - (embedding <=> (SELECT embedding FROM cases WHERE id = %s)) AS similarity, case_year, summary FROM cases WHERE id != %s AND embedding IS NOT NULL ORDER BY similarity DESC LIMIT 5", (case_id, case_id))
+        cur.execute("SELECT id, title, court_name, case_type, doc_url, ipc_sections, verdict, 1 - (embedding <=> (SELECT embedding FROM cases WHERE id = %s)) AS similarity, summary FROM cases WHERE id != %s AND embedding IS NOT NULL ORDER BY similarity DESC LIMIT 5", (case_id, case_id))
         rows = cur.fetchall()
         cur.close()
         results = []
@@ -469,7 +464,7 @@ def get_related(case_id):
                 "url": r[4], "ipc_sections": r[5], "verdict": r[6],
                 "similarity": round(r[7], 3),
                 "bns_sections": enriched["bns_sections"], "sentence_range": enriched["sentence_range"],
-                "year": r[8], "summary": r[9]
+                "year": None, "summary": r[8]
             })
         return jsonify(results)
     finally:
@@ -549,8 +544,7 @@ def stats():
         types = [{"type": r[0], "count": r[1]} for r in cur.fetchall()]
         
         # 3. Cases by Year (1950 - 2026)
-        cur.execute("SELECT case_year, COUNT(*) FROM cases WHERE case_year IS NOT NULL AND case_year BETWEEN 1950 AND 2026 GROUP BY case_year ORDER BY case_year")
-        years = [{"year": r[0], "count": r[1]} for r in cur.fetchall()]
+        years = []
         
         # 4. Top IPC Sections
         cur.execute("""
