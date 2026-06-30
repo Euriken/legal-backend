@@ -216,6 +216,8 @@ def get_cases(query, page=1, per_page=5, year_from=None, year_to=None, verdict=N
                 where_clauses.append("court_type = 'High_Court'")
             elif court == "District Court / Tribunals":
                 where_clauses.append("court_type = 'District_And_Tribunals'")
+            elif court in ("Delhi High Court", "High Court of Delhi"):
+                where_clauses.append("court_name IN ('Delhi High Court', 'High Court of Delhi')")
             else:
                 where_clauses.append("court_name = %s")
                 vector_params.append(court)
@@ -256,6 +258,8 @@ def get_cases(query, page=1, per_page=5, year_from=None, year_to=None, verdict=N
                     bm25_clauses.append("court_type = 'High_Court'")
                 elif court == "District Court / Tribunals":
                     bm25_clauses.append("court_type = 'District_And_Tribunals'")
+                elif court in ("Delhi High Court", "High Court of Delhi"):
+                    bm25_clauses.append("court_name IN ('Delhi High Court', 'High Court of Delhi')")
                 else:
                     bm25_clauses.append("court_name = %s")
                     bm25_params.append(court)
