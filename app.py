@@ -390,6 +390,17 @@ def search():
 
 @app.route("/case/<int:case_id>", methods=["GET"])
 def get_case(case_id):
+    cache_key = f"case:{case_id}"
+    cached = SEARCH_CACHE.get(cache_key)
+    if cached:
+        ts, result = cached
+        if time.time() - ts < SEARCH_TTL:
+            print(f"[cache] CASE HIT  key={cache_key}")
+            return jsonify(result)
+        else:
+            del SEARCH_CACHE[cache_key]
+    print(f"[cache] CASE MISS key={cache_key}")
+
     conn = get_conn()
     try:
         cur = conn.cursor()
@@ -431,12 +442,14 @@ Judgment Snippet:
         cur.close()
         ipc = row[6]
         enriched = enrich_ipc_sections(ipc)
-        return jsonify({
+        result_dict = {
             "id": row[0], "title": row[1], "court": row[2], "case_type": row[3],
             "url": row[4], "text": row[5], "ipc_sections": ipc, "verdict": row[7],
             "bns_sections": enriched["bns_sections"], "sentence_range": enriched["sentence_range"],
             "year": row[8], "summary": summary
-        })
+        }
+        SEARCH_CACHE[cache_key] = (time.time(), result_dict)
+        return jsonify(result_dict)
     finally:
         put_conn(conn)
 
