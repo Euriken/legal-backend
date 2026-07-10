@@ -10,6 +10,17 @@ import traceback
 
 from dotenv import load_dotenv
 load_dotenv()
+# ── BERT case type predictions (loaded once at startup) ──────────────────────
+import csv
+_CASE_TYPE_PREDICTIONS: dict = {}
+_predictions_path = os.path.join(os.path.dirname(__file__), "case_type_predictions.csv")
+if os.path.exists(_predictions_path):
+    with open(_predictions_path, newline="") as _f:
+        for row in csv.DictReader(_f):
+            _CASE_TYPE_PREDICTIONS[int(row["id"])] = row["predicted_case_type"]
+    print(f"Loaded {len(_CASE_TYPE_PREDICTIONS)} BERT case type predictions")
+else:
+    print("WARNING: case_type_predictions.csv not found, using DB case_type")
 
 # ── In-memory cache ─────────────────────────────────────────────────────────
 # search cache: key → (timestamp, result_dict)  — expires after SEARCH_TTL seconds
@@ -314,7 +325,7 @@ def get_cases(query, page=1, per_page=5, year_from=None, year_to=None, verdict=N
         enriched = enrich_ipc_sections(ipc)
         results.append({
             "id": r[0],
-            "title": r[1], "court": r[2], "case_type": r[3],
+            "title": r[1], "court": r[2], "case_type": _CASE_TYPE_PREDICTIONS.get(r[0], r[3]),
             "url": r[4], "text": r[5][:500],
             "similarity": vector_sim.get(cid, round(scores[cid], 4)),
             "ipc_sections": ipc, 
@@ -438,7 +449,7 @@ Judgment Snippet:
         ipc = row[6]
         enriched = enrich_ipc_sections(ipc)
         result_dict = {
-            "id": row[0], "title": row[1], "court": row[2], "case_type": row[3],
+            "id": row[0], "title": row[1], "court": row[2],"case_type": _CASE_TYPE_PREDICTIONS.get(row[0], row[3]),
             "url": row[4], "text": row[5], "ipc_sections": ipc, "verdict": row[7],
             "bns_sections": enriched["bns_sections"], "sentence_range": enriched["sentence_range"],
             "year": None, "summary": summary
@@ -460,7 +471,7 @@ def get_related(case_id):
         for r in rows:
             enriched = enrich_ipc_sections(r[5])
             results.append({
-                "id": r[0], "title": r[1], "court": r[2], "case_type": r[3],
+                "id": r[0], "title": r[1], "court": r[2],"case_type": _CASE_TYPE_PREDICTIONS.get(r[0], r[3]),
                 "url": r[4], "ipc_sections": r[5], "verdict": r[6],
                 "similarity": round(r[7], 3),
                 "bns_sections": enriched["bns_sections"], "sentence_range": enriched["sentence_range"],
