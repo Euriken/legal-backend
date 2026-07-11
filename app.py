@@ -13,7 +13,7 @@ load_dotenv()
 # ── BERT case type predictions (loaded once at startup) ──────────────────────
 import csv
 _CASE_TYPE_PREDICTIONS: dict = {}
-_predictions_path = os.path.join(os.path.dirname(__file__), "case_type_predictions.csv")
+_predictions_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "case_type_predictions.csv")
 if os.path.exists(_predictions_path):
     with open(_predictions_path, newline="") as _f:
         for row in csv.DictReader(_f):
@@ -23,7 +23,7 @@ else:
     print("WARNING: case_type_predictions.csv not found, using DB case_type")
 # ── BERT verdict predictions ─────────────────────────────────────────────────
 _VERDICT_PREDICTIONS: dict = {}
-_verdict_path = os.path.join(os.path.dirname(__file__), "verdict_predictions.csv")
+_verdict_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "verdict_predictions.csv")
 if os.path.exists(_verdict_path):
     with open(_verdict_path, newline="") as _vf:
         for row in csv.DictReader(_vf):
