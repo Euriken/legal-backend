@@ -12,6 +12,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app.py .
 COPY ipc_bns_map.py .
+COPY case_type_predictions.csv .
+COPY verdict_predictions.csv .
 
 EXPOSE 7860
 
