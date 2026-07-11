@@ -21,6 +21,14 @@ if os.path.exists(_predictions_path):
     print(f"Loaded {len(_CASE_TYPE_PREDICTIONS)} BERT case type predictions")
 else:
     print("WARNING: case_type_predictions.csv not found, using DB case_type")
+# ── BERT verdict predictions ─────────────────────────────────────────────────
+_VERDICT_PREDICTIONS: dict = {}
+_verdict_path = os.path.join(os.path.dirname(__file__), "verdict_predictions.csv")
+if os.path.exists(_verdict_path):
+    with open(_verdict_path, newline="") as _vf:
+        for row in csv.DictReader(_vf):
+            _VERDICT_PREDICTIONS[int(row["id"])] = row["predicted_verdict"]
+    print(f"Loaded {len(_VERDICT_PREDICTIONS)} BERT verdict predictions")
 
 # ── In-memory cache ─────────────────────────────────────────────────────────
 # search cache: key → (timestamp, result_dict)  — expires after SEARCH_TTL seconds
@@ -328,8 +336,8 @@ def get_cases(query, page=1, per_page=5, year_from=None, year_to=None, verdict=N
             "title": r[1], "court": r[2], "case_type": _CASE_TYPE_PREDICTIONS.get(r[0], r[3]),
             "url": r[4], "text": r[5][:500],
             "similarity": vector_sim.get(cid, round(scores[cid], 4)),
-            "ipc_sections": ipc, 
-            "verdict": r[8],
+            "ipc_sections": ipc,
+	    "verdict": _VERDICT_PREDICTIONS.get(r[0], r[8]),
             "bns_sections": enriched["bns_sections"],
             "sentence_range": enriched["sentence_range"],
             "year": None,
