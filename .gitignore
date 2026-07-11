@@ -4,3 +4,5 @@
 opennyaya/
 __pycache__/
 *.pyc
+!case_type_predictions.csv
+!verdict_predictions.csv
