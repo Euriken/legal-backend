@@ -9,3 +9,4 @@ __pycache__/
 injudgements_*.csv
 nyay_khoj_legal_classifier/
 nyay_khoj_verdict_classifier/
+opennyaya/

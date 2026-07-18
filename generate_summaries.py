@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from groq import Groq
 
 # Load environment
-load_dotenv(dotenv_path="/Users/devanshgoel/legal-backend/.env")
+load_dotenv(dotenv_path="/Users/devanshgoel/nyay-khoj/backend/.env")
 
 def main():
     parser = argparse.ArgumentParser(description="Batch generate summaries for cases using Groq LLM.")

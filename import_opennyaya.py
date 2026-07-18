@@ -49,7 +49,7 @@ def get_existing_titles(conn):
     return titles
 
 def main():
-    data_dir = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser("~/legal-backend/opennyaya/nyai-supreme-court-clean")
+    data_dir = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser("~/nyay-khoj/backend/opennyaya/nyai-supreme-court-clean")
     conn = psycopg2.connect(DB_URL)
     existing = get_existing_titles(conn)
     print(f"Existing cases: {len(existing)}")

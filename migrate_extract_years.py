@@ -4,7 +4,7 @@ import psycopg2
 from dotenv import load_dotenv
 
 # Load env variables
-load_dotenv(dotenv_path="/Users/devanshgoel/legal-backend/.env")
+load_dotenv(dotenv_path="/Users/devanshgoel/nyay-khoj/backend/.env")
 
 MONTHS = r"(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sept|sep|oct|nov|dec)"
 
