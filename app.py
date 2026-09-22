@@ -10,6 +10,15 @@ import traceback
 
 from dotenv import load_dotenv
 load_dotenv()
+
+# ── Precomputed Case Years ──────────────────────────────────────────────────
+import json
+CASE_YEARS = {}
+case_years_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "case_years.json")
+if os.path.exists(case_years_path):
+    with open(case_years_path) as f:
+        CASE_YEARS = json.load(f)
+
 # ── BERT case type predictions (loaded once at startup) ──────────────────────
 import csv
 _CASE_TYPE_PREDICTIONS: dict = {}
@@ -340,7 +349,7 @@ def get_cases(query, page=1, per_page=5, year_from=None, year_to=None, verdict=N
 	    "verdict": _VERDICT_PREDICTIONS.get(r[0], r[8]),
             "bns_sections": enriched["bns_sections"],
             "sentence_range": enriched["sentence_range"],
-            "year": None,
+            "year": CASE_YEARS.get(str(r[0])),
             "summary": r[9]
         })
     return {
@@ -460,7 +469,7 @@ Judgment Snippet:
             "id": row[0], "title": row[1], "court": row[2],"case_type": _CASE_TYPE_PREDICTIONS.get(row[0], row[3]),
             "url": row[4], "text": row[5], "ipc_sections": ipc, "verdict": row[7],
             "bns_sections": enriched["bns_sections"], "sentence_range": enriched["sentence_range"],
-            "year": None, "summary": summary
+            "year": CASE_YEARS.get(str(row[0])), "summary": summary
         }
         SEARCH_CACHE[cache_key] = (time.time(), result_dict)
         return jsonify(result_dict)
@@ -483,7 +492,7 @@ def get_related(case_id):
                 "url": r[4], "ipc_sections": r[5], "verdict": r[6],
                 "similarity": round(r[7], 3),
                 "bns_sections": enriched["bns_sections"], "sentence_range": enriched["sentence_range"],
-                "year": None, "summary": r[8]
+                "year": CASE_YEARS.get(str(r[0])), "summary": r[8]
             })
         return jsonify(results)
     finally:
