@@ -572,7 +572,9 @@ def stats():
         types = [{"type": r[0], "count": r[1]} for r in cur.fetchall()]
         
         # 3. Cases by Year (1950 - 2026)
-        years = []
+        from collections import Counter
+        counts = Counter(CASE_YEARS.values())
+        years = [{"year": year, "count": count} for year, count in sorted(counts.items())]
         
         # 4. Top IPC Sections
         cur.execute("""

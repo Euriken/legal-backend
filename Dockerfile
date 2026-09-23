@@ -14,6 +14,7 @@ COPY app.py .
 COPY ipc_bns_map.py .
 COPY case_type_predictions.csv .
 COPY verdict_predictions.csv .
+COPY case_years.json .
 
 EXPOSE 7860
 
