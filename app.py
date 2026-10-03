@@ -541,11 +541,15 @@ Never write paragraphs. Keep total response under 150 words."""}
 
         messages.append({"role": "user", "content": user_message})
 
+        t0 = time.time()
         response = groq_client.chat.completions.create(
             model="openai/gpt-oss-20b",
             messages=messages,
-            max_tokens=200
+            max_tokens=800,
+            reasoning_effort="low",
+            timeout=30,
         )
+        print(f"[chat] groq took {time.time() - t0:.2f}s", flush=True)
 
         return jsonify({"response": response.choices[0].message.content})
     except Exception as e:
