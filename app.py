@@ -448,7 +448,7 @@ Judgment Snippet:
 {snippet}
 """
                 response = groq_client.chat.completions.create(
-                    model="openai/gpt-oss-120b",
+                    model="openai/gpt-oss-20b",
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=150,
                     temperature=0.3
@@ -514,7 +514,7 @@ Summary: {case_text[:200]}
 In exactly 2 sentences, explain why this case is relevant. No intro, no filler."""
 
         response = groq_client.chat.completions.create(
-            model="openai/gpt-oss-120b",
+            model="openai/gpt-oss-20b",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=100
         )
@@ -542,7 +542,7 @@ Never write paragraphs. Keep total response under 150 words."""}
         messages.append({"role": "user", "content": user_message})
 
         response = groq_client.chat.completions.create(
-            model="openai/gpt-oss-120b",
+            model="openai/gpt-oss-20b",
             messages=messages,
             max_tokens=200
         )
