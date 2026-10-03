@@ -450,8 +450,10 @@ Judgment Snippet:
                 response = groq_client.chat.completions.create(
                     model="openai/gpt-oss-20b",
                     messages=[{"role": "user", "content": prompt}],
-                    max_tokens=150,
-                    temperature=0.3
+                    max_tokens=500,
+                    temperature=0.3,
+                    reasoning_effort="low",
+                    timeout=30,
                 )
                 summary = response.choices[0].message.content.strip()
                 
@@ -516,7 +518,9 @@ In exactly 2 sentences, explain why this case is relevant. No intro, no filler."
         response = groq_client.chat.completions.create(
             model="openai/gpt-oss-20b",
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=100
+            max_tokens=400,
+            reasoning_effort="low",
+            timeout=30,
         )
         return jsonify({"explanation": response.choices[0].message.content})
     except Exception as e:
